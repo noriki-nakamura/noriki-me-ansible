@@ -1,6 +1,6 @@
 ---
 vault_host_bastion: "your-bastion-instance-id-here"
-vault_host_zabbix_server: "monitor.noriki.me"
+vault_host_zabbix_server: "your-zabbix-host-destination-here"
 
 vault_wireguard_endpoint: "your-vpn-server-ip-or-domain-here"
 vault_wireguard_dns_server: "your-internal-dns-ip-here"
