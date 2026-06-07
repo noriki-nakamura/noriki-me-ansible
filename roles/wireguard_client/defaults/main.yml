@@ -1,0 +1,3 @@
+---
+# WireGuard client interface name
+wireguard_client_interface: wg0

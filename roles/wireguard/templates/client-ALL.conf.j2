@@ -1,0 +1,11 @@
+[Interface]
+PrivateKey = {{ item.private_key }}
+Address = {{ item.allowed_ips }}
+DNS = {{ wireguard_dns }}
+MTU = {{ item.wireguard_mtu | default(wireguard_mtu | default(1360)) }}
+
+[Peer]
+PublicKey = {{ wg_server_public_key.stdout | trim }}
+Endpoint = {{ wireguard_endpoint }}:{{ wireguard_port }}
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25

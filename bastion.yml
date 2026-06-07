@@ -1,0 +1,9 @@
+---
+- name: Setup Bastion Server
+  hosts: bastion
+  become: yes
+  roles:
+    - linux_common
+    - bastion
+    - wireguard
+    - zabbix_proxy

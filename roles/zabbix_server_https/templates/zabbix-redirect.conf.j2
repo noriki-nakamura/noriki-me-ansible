@@ -1,0 +1,4 @@
+<VirtualHost *:80>
+    ServerName {{ zabbix_domain }}
+    Redirect permanent / https://{{ zabbix_domain }}/
+</VirtualHost>

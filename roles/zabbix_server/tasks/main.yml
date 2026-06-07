@@ -1,0 +1,127 @@
+---
+- name: Install MIRACLE ZBX repository
+  dnf:
+    name: https://ftp.miraclelinux.com/zbx/7.0/miracle-zbx-release-7.0-1.noarch.rpm
+    state: present
+    disable_gpg_check: yes
+
+- name: Install required packages
+  dnf:
+    name:
+      - mariadb-server
+      - python3-PyMySQL
+      - httpd
+      - php-fpm
+      - miracle-zbx-server-mysql
+      - miracle-zbx-web-mysql
+      - miracle-zbx-web-japanese
+      - miracle-zbx-apache-conf
+      - miracle-zbx-web-deps
+      - miracle-zbx-sql-scripts
+      - miracle-zbx-selinux
+      - miracle-zbx-agent2
+    state: present
+
+- name: Enable SELinux booleans for ZBX
+  seboolean:
+    name: "{{ item }}"
+    state: yes
+    persistent: yes
+  loop:
+    - zabbix_can_network
+    - httpd_can_connect_zabbix
+    - httpd_can_network_connect_db
+  when: ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
+
+- name: Enable and start MariaDB service
+  systemd:
+    name: mariadb
+    state: started
+    enabled: yes
+
+- name: Create ZBX database
+  mysql_db:
+    name: "{{ zabbix_db_name }}"
+    state: present
+    collation: utf8mb4_bin
+    encoding: utf8mb4
+    login_unix_socket: /var/lib/mysql/mysql.sock
+
+- name: Create ZBX database user
+  mysql_user:
+    name: "{{ zabbix_db_user }}"
+    password: "{{ zabbix_db_password }}"
+    priv: "{{ zabbix_db_name }}.*:ALL"
+    host: localhost
+    state: present
+    login_unix_socket: /var/lib/mysql/mysql.sock
+
+- name: Check if ZBX database is already imported
+  shell: mysql -N -s -e "SELECT count(*) FROM information_schema.tables WHERE table_schema='{{ zabbix_db_name }}' AND table_name='users';"
+  register: zabbix_db_check
+  changed_when: false
+
+- name: Enable log_bin_trust_function_creators for ZBX import
+  shell: mysql -e "SET GLOBAL log_bin_trust_function_creators = 1;"
+  when: zabbix_db_check.stdout | trim == '0'
+
+- name: Import ZBX initial schema and data
+  shell: zcat /usr/share/miracle-zbx-sql-scripts/mysql/create.sql.gz | mysql {{ zabbix_db_name }}
+  when: zabbix_db_check.stdout | trim == '0'
+
+- name: Disable log_bin_trust_function_creators
+  shell: mysql -e "SET GLOBAL log_bin_trust_function_creators = 0;"
+  when: zabbix_db_check.stdout | trim == '0'
+
+- name: Configure ZBX server DBPassword
+  lineinfile:
+    path: /etc/zabbix/zabbix_server.conf
+    regexp: '^#?\s*DBPassword='
+    line: "DBPassword={{ zabbix_db_password }}"
+  notify: Restart zabbix-server
+
+- name: Configure ZBX server ProxyConfigFrequency
+  lineinfile:
+    path: /etc/zabbix/zabbix_server.conf
+    regexp: '^#?\s*ProxyConfigFrequency='
+    line: "ProxyConfigFrequency=60"
+  notify: Restart zabbix-server
+
+- name: Configure ZBX server ProxyDataFrequency
+  lineinfile:
+    path: /etc/zabbix/zabbix_server.conf
+    regexp: '^#?\s*ProxyDataFrequency='
+    line: "ProxyDataFrequency=60"
+  notify: Restart zabbix-server
+
+- name: Configure Zabbix Agent2 Hostname
+  lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^#?\s*Hostname='
+    line: "Hostname={{ zabbix_domain }}"
+  notify: Restart zabbix-agent2
+
+- name: Configure Zabbix Agent2 Server
+  lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^#?\s*Server='
+    line: "Server=127.0.0.1,::1,{{ vault_zabbix_server_ipv6 }}"
+  notify: Restart zabbix-agent2
+
+- name: Configure Zabbix Agent2 ServerActive
+  lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^#?\s*ServerActive='
+    line: "ServerActive=127.0.0.1,::1"
+  notify: Restart zabbix-agent2
+
+- name: Enable and start required services
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - httpd
+    - php-fpm
+    - zabbix-server
+    - zabbix-agent2

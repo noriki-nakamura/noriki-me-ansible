@@ -1,0 +1,4 @@
+---
+- name: Save iptables rules
+  shell: service iptables save
+  changed_when: false

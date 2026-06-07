@@ -1,0 +1,157 @@
+---
+- name: Install Zabbix repository for Amazon Linux 2023
+  dnf:
+    name: "https://repo.zabbix.com/zabbix/7.0/amazonlinux/2023/{{ ansible_architecture }}/zabbix-release-latest-7.0.amzn2023.noarch.rpm"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+
+- name: Install Zabbix repository for AlmaLinux 9
+  dnf:
+    name: "https://repo.zabbix.com/zabbix/7.0/alma/9/{{ ansible_architecture }}/zabbix-release-latest-7.0.el9.noarch.rpm"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_distribution == "AlmaLinux" and ansible_distribution_major_version == "9"
+
+- name: Install Zabbix repository for RHEL 9 family fallback
+  dnf:
+    name: "https://repo.zabbix.com/zabbix/7.0/rhel/9/{{ ansible_architecture }}/zabbix-release-latest-7.0.el9.noarch.rpm"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9" and ansible_distribution != "AlmaLinux"
+
+- name: Install Zabbix Proxy and Agent required packages
+  dnf:
+    name:
+      - zabbix-proxy-sqlite3
+      - zabbix-agent2
+      - zabbix-sql-scripts
+      - sqlite
+    state: present
+
+- name: Enable SELinux booleans for ZBX Proxy
+  seboolean:
+    name: zabbix_can_network
+    state: yes
+    persistent: yes
+  when: ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
+
+- name: Ensure Zabbix DB directory exists
+  file:
+    path: /var/lib/zabbix
+    state: directory
+    owner: zabbix
+    group: zabbix
+    mode: '0755'
+
+- name: Check if Zabbix Proxy SQLite DB exists
+  stat:
+    path: /var/lib/zabbix/zabbix_proxy.db
+  register: zabbix_proxy_db
+
+- name: Initialize Zabbix Proxy SQLite DB
+  shell: zcat -f /usr/share/zabbix-sql-scripts/sqlite3/proxy.sql* | sqlite3 /var/lib/zabbix/zabbix_proxy.db
+  when: not zabbix_proxy_db.stat.exists
+
+- name: Set ownership of Zabbix Proxy SQLite DB
+  file:
+    path: /var/lib/zabbix/zabbix_proxy.db
+    owner: zabbix
+    group: zabbix
+    mode: '0644'
+  when: not zabbix_proxy_db.stat.exists
+
+- name: Configure Zabbix Proxy Mode
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*ProxyMode='
+    line: "ProxyMode=1"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy Server
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*Server='
+    line: "Server={{ vault_zabbix_server_ipv4 }}"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy Hostname
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*Hostname='
+    line: "Hostname={{ common_hostname }}"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy DBName
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*DBName='
+    line: "DBName=/var/lib/zabbix/zabbix_proxy.db"
+  notify: Restart zabbix-proxy
+
+- name: Create Zabbix Proxy PSK file
+  copy:
+    content: "{{ vault_zabbix_proxy_psk_key }}\n"
+    dest: /etc/zabbix/zabbix_proxy.psk
+    owner: zabbix
+    group: zabbix
+    mode: '0600'
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy TLSConnect
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*TLSConnect='
+    line: "TLSConnect=psk"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy TLSAccept
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*TLSAccept='
+    line: "TLSAccept=psk"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy TLSPSKIdentity
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*TLSPSKIdentity='
+    line: "TLSPSKIdentity={{ vault_zabbix_proxy_psk_identity }}"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Proxy TLSPSKFile
+  lineinfile:
+    path: /etc/zabbix/zabbix_proxy.conf
+    regexp: '^#?\s*TLSPSKFile='
+    line: "TLSPSKFile=/etc/zabbix/zabbix_proxy.psk"
+  notify: Restart zabbix-proxy
+
+- name: Configure Zabbix Agent2 Server
+  lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^#?\s*Server='
+    line: "Server=127.0.0.1"
+  notify: Restart zabbix-agent2
+
+- name: Configure Zabbix Agent2 ServerActive
+  lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^#?\s*ServerActive='
+    line: "ServerActive=127.0.0.1"
+  notify: Restart zabbix-agent2
+
+- name: Configure Zabbix Agent2 Hostname
+  lineinfile:
+    path: /etc/zabbix/zabbix_agent2.conf
+    regexp: '^#?\s*Hostname='
+    line: "Hostname={{ common_hostname }}"
+  notify: Restart zabbix-agent2
+
+- name: Enable and start Zabbix services
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - zabbix-proxy
+    - zabbix-agent2

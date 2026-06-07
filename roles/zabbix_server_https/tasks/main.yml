@@ -1,0 +1,26 @@
+---
+- name: Check if certificate already exists
+  stat:
+    path: "/etc/letsencrypt/live/{{ zabbix_domain }}/fullchain.pem"
+  register: cert_stat
+
+- name: Issue Let's Encrypt certificate using DNS validation
+  command: >
+    certbot certonly --dns-route53
+    --email {{ vault_cert_email }}
+    -d {{ zabbix_domain }}
+    --agree-tos
+    --non-interactive
+  when: not cert_stat.stat.exists
+
+- name: Configure Apache SSL VirtualHost
+  template:
+    src: zabbix-ssl.conf.j2
+    dest: /etc/httpd/conf.d/zabbix-ssl.conf
+  notify: Restart httpd
+
+- name: Configure Apache HTTP to HTTPS redirect
+  template:
+    src: zabbix-redirect.conf.j2
+    dest: /etc/httpd/conf.d/zabbix-redirect.conf
+  notify: Restart httpd

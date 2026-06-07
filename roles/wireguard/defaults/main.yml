@@ -1,0 +1,27 @@
+---
+# WireGuard UDP listen port
+wireguard_port: 51820
+
+# WireGuard MTU for interface
+wireguard_mtu: 1360
+
+# WireGuard server VPN address and CIDR
+wireguard_address: "10.193.0.1/24"
+wireguard_address_v6: "fd10:193::1/64"
+
+# サーバーのアドレス
+wireguard_endpoint: "{{ vault_wireguard_endpoint }}"
+
+# クライアント用DNSサーバー
+wireguard_dns: "{{ vault_wireguard_dns_server }}"
+
+# VPNサーバー先の NW のCIDR
+vpc_cidr: "10.192.0.0/16"
+
+# 接続を許可するクライアントのリスト
+wireguard_peers:
+  - name: "Zephyr"
+    allowed_ips: "10.193.0.2/32, fd10:193::2/128"
+  - name: "Aether"
+    allowed_ips: "10.193.0.3/32, fd10:193::3/128"
+    wireguard_mtu: "1280"

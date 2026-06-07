@@ -1,0 +1,24 @@
+---
+- name: Install epel-release
+  dnf:
+    name: epel-release
+    state: present
+
+- name: Install wireguard-tools
+  dnf:
+    name: wireguard-tools
+    state: present
+
+- name: Ensure /etc/wireguard directory exists
+  file:
+    path: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Enable wg-quick@{{ wireguard_client_interface }} service
+  systemd:
+    name: "wg-quick@{{ wireguard_client_interface }}"
+    enabled: yes
+    daemon_reload: yes

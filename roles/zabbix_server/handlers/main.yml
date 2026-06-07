@@ -1,0 +1,25 @@
+---
+- name: Restart mariadb
+  systemd:
+    name: mariadb
+    state: restarted
+
+- name: Restart httpd
+  systemd:
+    name: httpd
+    state: restarted
+
+- name: Restart php-fpm
+  systemd:
+    name: php-fpm
+    state: restarted
+
+- name: Restart zabbix-server
+  systemd:
+    name: zabbix-server
+    state: restarted
+
+- name: Restart zabbix-agent2
+  systemd:
+    name: zabbix-agent2
+    state: restarted

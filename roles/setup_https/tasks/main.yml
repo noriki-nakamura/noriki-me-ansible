@@ -1,0 +1,31 @@
+---
+- name: Install epel-release
+  dnf:
+    name: epel-release
+    state: present
+
+- name: Install certbot and Route53 plugin
+  dnf:
+    name:
+      - certbot
+      - python3-certbot-dns-route53
+      - mod_ssl
+    state: present
+
+- name: Ensure /root/.aws directory exists
+  file:
+    path: /root/.aws
+    state: directory
+    mode: '0700'
+
+- name: Configure AWS credentials for Route53
+  template:
+    src: aws_credentials.j2
+    dest: /root/.aws/credentials
+    mode: '0600'
+
+- name: Enable certbot-renew timer
+  systemd:
+    name: certbot-renew.timer
+    state: started
+    enabled: yes

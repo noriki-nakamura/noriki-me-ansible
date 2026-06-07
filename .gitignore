@@ -1,0 +1,19 @@
+# Ansible temporary files
+*.retry
+*.log
+
+# Ansible Vault password files
+.vault_password
+*vault-password*
+
+# Private keys / credentials
+*.key
+*.key.pub
+*privatekey
+*publickey
+*.pem
+
+# IDE / System files
+.idea/
+.vscode/
+.DS_Store

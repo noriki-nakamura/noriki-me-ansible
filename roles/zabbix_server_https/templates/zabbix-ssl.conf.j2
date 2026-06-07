@@ -1,0 +1,10 @@
+<VirtualHost *:443>
+    ServerName {{ zabbix_domain }}
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/{{ zabbix_domain }}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/{{ zabbix_domain }}/privkey.pem
+
+    # ZBX Alias
+    Alias /zabbix /usr/share/zabbix
+</VirtualHost>

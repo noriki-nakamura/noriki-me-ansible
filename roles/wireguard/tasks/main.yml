@@ -1,0 +1,173 @@
+---
+- name: Install wireguard-tools
+  dnf:
+    name: wireguard-tools
+    state: present
+
+- name: Enable IPv4 forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Enable IPv6 forwarding
+  sysctl:
+    name: net.ipv6.conf.all.forwarding
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Ensure /etc/wireguard directory exists
+  file:
+    path: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Check if WireGuard private key exists
+  stat:
+    path: /etc/wireguard/privatekey
+  register: wg_privkey_stat
+
+- name: Generate WireGuard private key
+  shell: wg genkey > /etc/wireguard/privatekey
+  args:
+    creates: /etc/wireguard/privatekey
+  when: not wg_privkey_stat.stat.exists
+
+- name: Ensure private key has correct permissions
+  file:
+    path: /etc/wireguard/privatekey
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Check if WireGuard public key exists
+  stat:
+    path: /etc/wireguard/publickey
+  register: wg_pubkey_stat
+
+- name: Generate WireGuard public key
+  shell: wg pubkey < /etc/wireguard/privatekey > /etc/wireguard/publickey
+  args:
+    creates: /etc/wireguard/publickey
+  when: not wg_pubkey_stat.stat.exists
+
+- name: Read WireGuard private key
+  command: cat /etc/wireguard/privatekey
+  register: wg_private_key
+  changed_when: false
+  no_log: true
+  check_mode: false
+
+- name: Read WireGuard server public key
+  command: cat /etc/wireguard/publickey
+  register: wg_server_public_key
+  changed_when: false
+  no_log: true
+  check_mode: false
+
+- name: Ensure client configuration directories exist
+  file:
+    path: "/etc/wireguard/clients/{{ item.name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop: "{{ wireguard_peers }}"
+
+- name: Generate client private keys
+  shell: "wg genkey > /etc/wireguard/clients/{{ item.name }}/privatekey"
+  args:
+    creates: "/etc/wireguard/clients/{{ item.name }}/privatekey"
+  loop: "{{ wireguard_peers }}"
+
+- name: Ensure client private keys have correct permissions
+  file:
+    path: "/etc/wireguard/clients/{{ item.name }}/privatekey"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: "{{ wireguard_peers }}"
+
+- name: Generate client public keys
+  shell: "wg pubkey < /etc/wireguard/clients/{{ item.name }}/privatekey > /etc/wireguard/clients/{{ item.name }}/publickey"
+  args:
+    creates: "/etc/wireguard/clients/{{ item.name }}/publickey"
+  loop: "{{ wireguard_peers }}"
+
+- name: Slurp client private keys
+  slurp:
+    src: "/etc/wireguard/clients/{{ item.name }}/privatekey"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: client_private_keys
+
+- name: Slurp client public keys
+  slurp:
+    src: "/etc/wireguard/clients/{{ item.name }}/publickey"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: client_public_keys
+
+- name: Combine peer information with generated keys
+  set_fact:
+    wireguard_peers_with_keys: "{{ wireguard_peers_with_keys | default([]) + [peer_entry] }}"
+  vars:
+    peer_entry: >-
+      {{
+        item | combine({
+          'public_key': client_public_keys.results[ansible_loop.index0].content | b64decode | trim,
+          'private_key': client_private_keys.results[ansible_loop.index0].content | b64decode | trim
+        })
+      }}
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+  no_log: true
+
+
+- name: Configure WireGuard interface (wg0.conf)
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Restart WireGuard
+
+- name: Generate client configuration files (All traffic)
+  template:
+    src: client-ALL.conf.j2
+    dest: "/etc/wireguard/clients/{{ item.name }}/{{ item.name }}-ALL.conf"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: "{{ wireguard_peers_with_keys }}"
+  no_log: true
+
+- name: Generate client configuration files (Split tunnel)
+  template:
+    src: client-NW.conf.j2
+    dest: "/etc/wireguard/clients/{{ item.name }}/{{ item.name }}-NW.conf"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: "{{ wireguard_peers_with_keys }}"
+  no_log: true
+
+
+- name: Enable and start wg-quick@wg0 service
+  systemd:
+    name: wg-quick@wg0
+    state: started
+    enabled: yes
+    daemon_reload: yes
+

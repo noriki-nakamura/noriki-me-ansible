@@ -1,0 +1,14 @@
+---
+vault_host_bastion: "your-bastion-instance-id-here"
+vault_host_zabbix_server: "monitor.noriki.me"
+
+vault_wireguard_endpoint: "your-vpn-server-ip-or-domain-here"
+vault_wireguard_dns_server: "your-internal-dns-ip-here"
+
+vault_zabbix_server_ipv4: "your-zabbix-server-ipv4-here"
+vault_zabbix_server_ipv6: "your-zabbix-server-ipv6-here"
+
+vault_zabbix_proxy_psk_identity: "your-zabbix-proxy-psk-identity-here"
+vault_zabbix_proxy_psk_key: "your-zabbix-proxy-psk-key-here"
+
+vault_cert_email: "your-email-address"

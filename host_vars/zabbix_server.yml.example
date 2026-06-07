@@ -1,0 +1,4 @@
+---
+zabbix_domain: "your-zabbix-domain"
+aws_access_key_id: "your-aws-accesskey"
+aws_secret_access_key: "your-aws-secretkey"
