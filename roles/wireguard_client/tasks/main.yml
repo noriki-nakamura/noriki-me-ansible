@@ -17,8 +17,29 @@
     group: root
     mode: '0700'
 
-- name: Enable wg-quick@{{ wireguard_client_interface }} service
+- name: Enable and start systemd-resolved service
   systemd:
-    name: "wg-quick@{{ wireguard_client_interface }}"
+    name: systemd-resolved
+    state: started
     enabled: yes
-    daemon_reload: yes
+
+- name: Configure NetworkManager to use systemd-resolved backend
+  ini_file:
+    path: /etc/NetworkManager/NetworkManager.conf
+    create: yes
+    section: main
+    option: dns
+    value: systemd-resolved
+    mode: '0644'
+  notify: Restart NetworkManager
+
+- name: Flush handlers to apply NetworkManager changes
+  meta: flush_handlers
+
+- name: Create symlink for /etc/resolve.conf
+  file:
+    src: /run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: yes
+
